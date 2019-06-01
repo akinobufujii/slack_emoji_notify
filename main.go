@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"strings"
 
 	"github.com/nlopes/slack"
 	"github.com/nlopes/slack/slackutilsx"
@@ -33,6 +34,12 @@ func main() {
 	// WebSocketでSlack RTM APIに接続する
 	rtm := api.NewRTM()
 
+	// 自身の情報を手に入れる
+	auth, err := rtm.AuthTest()
+	if err != nil {
+		panic(err)
+	}
+
 	// goroutineで並列化する
 	go rtm.ManageConnection()
 
@@ -62,6 +69,22 @@ func main() {
 				// エスケープシーケンスを有効化させる
 				messageString = slackutilsx.EscapeMessage(messageString)
 				rtm.SendMessage(rtm.NewOutgoingMessage(messageString, settingData.TargetChannelID))
+			}
+			break
+
+		case *slack.MessageEvent:
+			{
+				if strings.Contains(ev.Text, "<@"+auth.UserID+">") {
+					// 自分宛てのメッセージがある
+					textSlice := strings.Split(ev.Text, " ")
+					for _, text := range textSlice {
+						switch text {
+						case "ping":
+							rtm.SendMessage(rtm.NewOutgoingMessage("私は生きてます", ev.Channel))
+							break
+						}
+					}
+				}
 			}
 			break
 		}
