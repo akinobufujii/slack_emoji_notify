@@ -9,9 +9,11 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+// SettingData この通知に必要な設定データ
 type SettingData struct {
-	APIToken        string `yaml:"api_token"`
-	TargetChannelID string `yaml:"target_channel_id"`
+	AccessToken        string `yaml:"access_token"`
+	BotUserAccessToken string `yaml:"bot_user_access_token"`
+	TargetChannelID    string `yaml:"target_channel_id"`
 }
 
 func main() {
@@ -29,10 +31,11 @@ func main() {
 	}
 
 	// APIトークンでbot機能を有効化
-	var api = slack.New(settingData.APIToken)
+	accessAPI := slack.New(settingData.AccessToken)
+	botUserAccessAPI := slack.New(settingData.BotUserAccessToken)
 
 	// WebSocketでSlack RTM APIに接続する
-	rtm := api.NewRTM()
+	rtm := botUserAccessAPI.NewRTM()
 
 	// 自身の情報を手に入れる
 	auth, err := rtm.AuthTest()
@@ -77,13 +80,39 @@ func main() {
 				if strings.Contains(ev.Text, "<@"+auth.UserID+">") {
 					// 自分宛てのメッセージがある
 					textSlice := strings.Split(ev.Text, " ")
-					for _, text := range textSlice {
-						switch text {
-						case "ping":
-							rtm.SendMessage(rtm.NewOutgoingMessage("私は生きてます", ev.Channel))
-							break
+
+					if len(textSlice) <= 1 {
+						rtm.SendMessage(rtm.NewOutgoingMessage("私は以下の言葉に反応します\n`ping`\n`url`", ev.Channel))
+					}
+
+					switch textSlice[1] {
+					case "ping":
+						rtm.SendMessage(rtm.NewOutgoingMessage("私は生きてます", ev.Channel))
+						break
+
+					case "url":
+						emojiMap, err := accessAPI.GetEmoji()
+						if err != nil {
+							panic(err)
+						}
+
+						if len(textSlice) <= 2 {
+							rtm.SendMessage(rtm.NewOutgoingMessage("引数が足りません\n使い方は `url 「任意の絵文字」` です", ev.Channel))
+							continue
+						}
+
+						emojiKey := strings.Replace(textSlice[2], ":", "", -1)
+
+						value, ok := emojiMap[emojiKey]
+						if ok {
+							// ※エイリアス未対応
+							messageStr := "絵文字のurlは以下です\n" + value
+							rtm.SendMessage(rtm.NewOutgoingMessage(messageStr, ev.Channel))
+						} else {
+							rtm.SendMessage(rtm.NewOutgoingMessage("絵文字のurlの獲得に失敗しました", ev.Channel))
 						}
 					}
+					break
 				}
 			}
 			break
